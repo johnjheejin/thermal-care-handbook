@@ -30,7 +30,7 @@
 | 케이스 ID | OS / 환경 | 대상 사양 | 핵심 해결 성과 | 세부 가이드 링크 |
 | :---: | :---: | :--- | :--- | :---: |
 | **#CASE-01** | Windows 11<br>*(eGPU)* | **삼성 노트북9 Always 15"**<br>(i7-8550U + GTX 1080 eGPU) | **온도 95°C ➡️ 53°C~65°C (-30°C 감축)**<br>SpeedShift EPP 160 + PL1 19W 봉인 | [📖 케이스 보기](cases/nt900x5t-i7-8550u-egpu.md) |
-| **#CASE-02** | macOS | *(Coming Soon - Mac m-series/Intel thermal tuning)* | 확장 예정 | - |
+| **#CASE-02** | macOS | **2019 맥북 프로/에어 13"**<br>(Intel Core i5) | **온도 98°C ➡️ 52°C~60°C (무소음 달성)**<br>Macs Fan Control + Turbo Boost Off | [📖 케이스 보기](cases/macbook-pro-2019-i5.md) |
 | **#CASE-03** | Windows | *(Coming Soon - Desktop / Gaming Laptop cases)* | 확장 예정 | - |
 
 ---
