@@ -1,7 +1,7 @@
 # 📱 [Case #02] 2019 맥북 (Intel Core i5) 용광로 발열 & 비행기 이륙 소음 케어
 
 > **환경**: macOS (Catalina ~ Sonoma/Sequoia) | 2019 맥북 프로/에어 13" (Intel i5)  
-> **핵심 성과**: 온도가 **95~100°C ➡️ 55~65°C**로 30~40°C 감축 / 비행기 이륙 팬 소음 완전 차단
+> **핵심 성과**: 온도가 **95~100°C ➡️ 52~60°C**로 35~40°C 감축 / 비행기 이륙 팬 소음 완전 차단 (0.9W급 무소음)
 
 ---
 
@@ -16,12 +16,14 @@
 
 ---
 
-## 2. 🔍 원인 분석
+## 2. 🔍 윈도우(ThrottleStop) vs 맥(macOS) 1:1 전력/클럭 운영 매핑표
 
-1. **macOS 기본 팬 제어 알고리즘의 뒷북 반응**:
-   * 애플 기본 팬 곡선은 온도가 85~90°C에 도달할 때까지 팬을 1,200 RPM(무소음)으로 지연시키다가, 뒤늦게 95°C가 되어서야 6,000 RPM으로 올리는 둔감한 특성이 있음.
-2. **얇은 유니바디 & 인텔 i5 터보 부스트의 고전압**:
-   * 얇은 폼팩터에서 i5 터보 부스트(순간 전력 28W+)가 터지면서 전압이 인가되어 방열 한계를 즉시 초과함.
+| 튜닝 목표 | Windows 11 (ThrottleStop 구현) | macOS (Intel Mac 구현 방법) |
+| :---: | :---: | :---: |
+| **AC 충전 / eGPU 모드**<br>*(스윗스팟 성능 & 70°C 미만)* | **Profile 1 적용**<br>• SpeedShift EPP `160`<br>• PL1 `19W` / PL2 `22W` + Clamp<br>• Turbo Ratio `31` (3.1GHz 고정) | **VoltageShift MSR & 전력 봉인**<br>• `./voltageshift msr 0x774 0xA0` (EPP 160)<br>• `./voltageshift power 18 22 32` (PL1 18W)<br>• `./voltageshift turbo 31` (3.1GHz 상한) |
+| **DC 배터리 모드**<br>*(0.9W / 무소음 / 배터리 극대화)* | **Profile 2 적용**<br>• `Disable Turbo` (터보 OFF)<br>• SpeedShift EPP `192`<br>• 전력 `0.9W` / 온도 `38~40°C` | **VoltageShift EPP + Turbo Switcher**<br>• `Turbo Boost Switcher` ➡️ Disable<br>• `./voltageshift msr 0x774 0xC0` (EPP 192)<br>• 전력 `1~2W` / 온도 `45~52°C` 무소음 |
+| **전원 자동 감지 스위칭** | Options `AC Profile 1` / `Battery Profile 2` | `VoltageShift launchd` 데몬 / macOS 전원 자동화 |
+| **팬 속도 커스텀 선제 제어** | 삼성 세팅 `Fn + F11` (저소음 모드) | `Macs Fan Control` (CPU PECI 센서 55°C~82°C 커스텀 곡선) |
 
 ---
 
@@ -43,30 +45,23 @@ Apple 기본 뒷북 팬 제어를 미리 선제적으로 돌도록 커스텀 센
 * **효과**: 
   * i5 터보 부스트가 꺼지면서 기본 클럭(1.4~2.4GHz)으로 작동.
   * **온도가 98°C ➡️ 55°C로 무려 40°C 감축!**
-  * 팬 소음이 완전히 사라져 도서관/카페 사용 가능. (작업 시에만 다시 Enable)
+  * 팬 소음이 완전히 사라져 도서관/카페 사용 가능.
 
-### (3) [고급 정밀 튜닝 3단계] VoltageShift MSR 전력/클럭 세부 제어 (Terminal)
-윈도우의 ThrottleStop처럼 **PL1(지속 전력), PL2(순간 전력), 최대 클럭, 언더볼팅**을 정밀하게 제어합니다.
+### (3) [고급 정밀 튜닝 3단계] VoltageShift MSR 전력/클럭/EPP 세부 제어 (Terminal)
+윈도우의 ThrottleStop처럼 **PL1(지속 전력), PL2(순간 전력), 최대 클럭, EPP 레지스터, 언더볼팅**을 정밀하게 제어합니다.
 
 > 💡 **왜 Volta가 아닌 VoltageShift인가?**  
 > 과거 상용 GUI 앱인 `Volta`는 최신 macOS 커널 보안 패치 이후 업데이트가 멈춰 실행 오류가 발생합니다. 현재 최신 macOS(Monterey~Sonoma)까지 지속 호환되는 툴은 오픈소스인 **`VoltageShift`**가 유일합니다.
 
+* **SpeedShift EPP 수치 강제 주입 (`MSR 0x774`)**:
+  * AC 충전 모드 (EPP 160 / `0xA0`): `./voltageshift msr 0x774 0xA0`
+  * DC 배터리 모드 (EPP 192 / `0xC0`): `./voltageshift msr 0x774 0xC0`
 * **PL1 / PL2 전력 제한 (TPL 모드)**:
-  ```bash
-  ./voltageshift power 18 22 32
-  ```
-  *(지속 전력 18W / 순간 전력 22W / 유지시간 32초로 봉인 ➡️ 발열 폭발 방지)*
-
+  * `./voltageshift power 18 22 32` (지속 18W / 순간 22W / 유지시간 32초로 봉인)
 * **최대 부스트 클럭 제한 (FIVR 모드)**:
-  ```bash
-  ./voltageshift turbo 31
-  ```
-  *(부스트 상한선을 3.1GHz로 고정하여 전력 소모 감축)*
-
+  * `./voltageshift turbo 31` (부스트 상한선을 3.1GHz로 고정)
 * **CPU Core & Cache 언더볼팅**:
-  ```bash
-  ./voltageshift offset -80 -50 -80
-  ```
+  * `./voltageshift offset -80 -50 -80`
 
 ### (4) [하드웨어 개조 선택] 서멀패드 하판 개조 (Thermal Pad Mod)
 알루미늄 맥북 하판 전체를 거대한 히트싱크로 활용하는 커뮤니티 전설의 개조법입니다.
@@ -84,8 +79,9 @@ Apple 기본 뒷북 팬 제어를 미리 선제적으로 돌도록 커스텀 센
 ### 💡 주요 기능 기획
 1. **메뉴바 콤팩트 제어**: 윈도우 ThrottleStop처럼 전력 모드 원클릭 스위칭
 2. **슬라이더 기반 전력 제어**: PL1(18W), PL2(22W) 슬라이더 바 조작
-3. **클럭 상한선 지정**: `3.1GHz` / `2.8GHz` 원클릭 프리셋 버튼
-4. **실시간 온습도 & RPM 모니터링 그래프**
+3. **EPP 수치 지정**: `160` (AC) / `192` (DC) 원클릭 토글
+4. **클럭 상한선 지정**: `3.1GHz` / `2.8GHz` 원클릭 프리셋 버튼
+5. **실시간 온습도 & RPM 모니터링 그래프**
 
 ---
 
@@ -95,8 +91,8 @@ Apple 기본 뒷북 팬 제어를 미리 선제적으로 돌도록 커스텀 센
 | :---: | :---: | :---: | :--- |
 | **순정 상태** | **95°C ~ 100°C** | 비행기 이륙 소음 (6000 RPM) | ❌ 쓰로틀링 및 고열 심함 |
 | **Macs Fan Control 커스텀** | **75°C ~ 82°C** | 중저음 조용한 바람 소리 | 🟢 게임 / 작업 시 |
-| **VoltageShift MSR 봉인 (18W)** | **65°C ~ 72°C** | 아주 미세한 바람 소리 | 🏆 **고부하 작업 / 렌더링** |
-| **Turbo Boost Off 모드** | **52°C ~ 60°C** | **팬 소음 0dB (완전 무소음)** | 🏆 **사무, 웹서핑, 도서관, 카페** |
+| **VoltageShift MSR 봉인 (18W+EPP 160)** | **65°C ~ 72°C** | 아주 미세한 바람 소리 | 🏆 **고부하 작업 / 렌더링** |
+| **Turbo Boost Off + EPP 192 모드** | **48°C ~ 55°C** | **팬 소음 0dB (완전 무소음)** | 🏆 **사무, 웹서핑, 도서관, 카페** |
 
 ---
 *가이드 최종 업데이트: 2026-08-12*
